@@ -172,7 +172,7 @@ for ( i in pats ) {
         # save the .nii.gz files into created folders
         writeNifti( nii[[i]][[j]][[k]][[l]][[1]],
                     paste0("data/bids/sub-prague-",i,"/ses-postop-",english(j),"/",k,
-                           "/sub-prague-",i,"_ses-postop-",english(j),"_",l,".nii.gz" ) )
+                           "/sub-prague-",i,"_ses-postop-",english(j),"_",l,".nii" ) )
     }
   }
 }
