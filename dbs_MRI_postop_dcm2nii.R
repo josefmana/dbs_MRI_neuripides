@@ -178,9 +178,34 @@ for ( i in pats ) {
 }
 
 
-for ( j in names(nii[[i]]) ) {
+# ----------- defacing via Freesurfer's mri_defacing -----------
+
+# since fsl_deface from FSL didn't work properly in my machine (it didn't touch the face but skimmed ears and
+# some parts of the brain instead), the mri_deface used here is the older one which works as a standalone
+# application with license file not being necessary (see https://dx.doi.org/10.1002/hbm.20312)
+
+# check whether there is mri_deface in a "mri_deface" subfolder in the working directory
+# if not, download and install it from https://surfer.nmr.mgh.harvard.edu/fswiki/mri_deface
+for ( i in c("mri_deface","talairach_mixed_with_skull.gca","face.gca") ) {
+  if( file.exists( paste0("mri_deface/",i) ) ) print( paste0(i," : OK") )
+  else print( paste0(i, " not present, download it at https://surfer.nmr.mgh.harvard.edu/fswiki/mri_deface!") )
+}
+
+# now extract all t1w files' names
+t1w.files <- list.files( "data/bids", recursive = T ) %>% as.data.frame() %>% slice( which( grepl("t1w",.) ) )
+
+# loop through all T1w images and deface them, save both the original as well as the defaced image
+for ( i in t1w.files[,1] ) {
   
-  # create ant and func folders if they aren't already there
-  if ( !dir.exists(paste0("data/bids/sub-prague-",i,"/",j)) ) dir.create( paste0("data/bids/sub-prague-",i,"/",j) )
+  # rename the original file
+  file.rename( from = paste0("data/bids/",i), to = paste0( "data/bids/",gsub(".nii","_original.nii",i) ) )
+  
+  # conduct the defacing by calling mri_deface from terminal
+  system( paste( paste0( getwd(), "/mri_deface/mri_deface" ), # mri_deface tool
+                 paste0( getwd(), "/data/bids/", gsub(".nii","_original.nii",i) ), # the original file/input
+                 paste0( getwd(), "/mri_deface/talairach_mixed_with_skull.gca" ), # mri_deface supporting file
+                 paste0( getwd(), "/mri_deface/face.gca" ), # mri_deface supporting file
+                 paste0( getwd(), "/data/bids/", gsub(".nii","_defaced.nii", i ) ), # output
+                 sep = " " ) )
   
 }
