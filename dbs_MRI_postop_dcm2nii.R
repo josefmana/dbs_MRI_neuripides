@@ -25,6 +25,7 @@ for ( i in pkgs ) {
 
 
 # ----------- prepare parameters for data extraction and control -----------
+
 n <- 79 # number of patients
 n_scans <- list( t1 = 176 , rs = 203 ) # expected number of raw scans in anatomical (T1) and functional (RS) images
 fold <- "data/raw" # folder that holds the raw data
@@ -178,17 +179,52 @@ for ( i in pats ) {
 }
 
 
-# ----------- defacing via pydeface -----------
+# ----------- defacing via spm_deface -----------
 
 # since fsl_deface from FSL didn't work properly in my machine (it didn't touch the face but skimmed ears and
 # some parts of the brain instead), neither did mri_deface from FreeSurfer (it didn't converge in some patients,
-# it sliced parts of frontal lobes in others), trying pydeface instead (see https://pypi.org/project/pydeface/)
+# it sliced parts of frontal lobes in others), and pydeface (see https://pypi.org/project/pydeface/) sliced the
+# face too often below the eye, trying spm_deface now
 
 # extract all t1w files' names
 t1w.files <- list.files( "data/bids", recursive = T ) %>% as.data.frame() %>% slice( which( grepl("t1w",.) ) )
 
-# write a text file to be push through a pydeface via macOS terminal
-for ( i in t1w.files[,1] ) {
-  write( paste0( "cd ",getwd(),"/data/bids/",sub( "/[^/]*$", "", i ) ), file = "conduct_pydeface.txt", append = T ) # set-up directory
-  write( paste0("pydeface ", sub( ".*/", "", i ) ), file = "conduct_pydeface.txt", append = T ) # conduct tdefacing
+# write a matlab script for spm_deface
+writeLines( paste0( "spm_deface( {\n",
+                    paste( paste0("'/Users/josefmana/Desktop/mercenaries/dbs_MRI_neuripides/data/bids/",t1w.files[,1],"'"), collapse = "\n"),
+                    "\n} )"
+                    ), con = "conduct_spmdeface.m"
+            )
+
+# go to matlab and run the code there, work well this time
+
+
+# ----------- build folder structure for data suitable for sharing -----------
+
+# first create a parent directory for shareables
+if ( !dir.exists("data/4share") ) dir.create("data/4share")
+
+# next fill it in with patient folders
+for ( i in pats ) {
+  # create patient's folder if ain't already there
+  if ( !dir.exists( paste0( "data/4share/sub-prague-",i ) ) ) dir.create( paste0( "data/4share/sub-prague-",i ) )
+    
+    for ( j in c("anat","func") ) {
+      # create a folder for the image type
+      if ( !dir.exists( paste0( "data/4share/sub-prague-",i,"/",j ) ) ) dir.create( paste0("data/4share/sub-prague-",i,"/",j ) )
+      
+  }
 }
+
+# next sort the data by hand, check whether defacing worked as intended, fill-in the 4share directory by data
+# from the bids directory
+all.nms <- list.files("data/4share", recursive = T ) %>%
+  as.data.frame() %>%
+  rename( "old_nms" = ".") %>%
+  slice( starts_with( "sub-prague", vars = old_nms ) ) %>%
+  mutate( new_nms = gsub("anon_","",old_nms ) %>% gsub("ses-postop-one_","",.) %>% gsub("ses-postop-two_","",.) )
+
+# rename all the files
+for ( i in 1:nrow(all.nms) ) file.rename( from = paste0("data/4share/",all.nms[i,"old_nms"]),
+                                          to = paste0("data/4share/",all.nms[i,"new_nms"])
+                                          )
