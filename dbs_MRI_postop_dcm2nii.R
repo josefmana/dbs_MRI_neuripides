@@ -1,7 +1,7 @@
 # In this script I first summarize raw (DICOM) MRI data from a chosen parent directory and then convert them
 # to NIfTI format (via Roden`s dcm2niix, https://github.com/rordenlab/dcm2niix) in the BIDS folder structure
 
-# In the latest run (2022-07-29) I ran in R version 4.2.0 (2022-04-22), on aarch64-apple-darwin20 (64-bit)
+# In the latest run (2022-08-31) I ran in R version 4.2.0 (2022-04-22), on aarch64-apple-darwin20 (64-bit)
 # platform under macOS Monterey 12.4. the following versions of packages employed: dplyr_1.0.9, tidyverse_1.3.1,
 # divest_0.10.2, and RNifti_1.4.1
 
@@ -178,34 +178,17 @@ for ( i in pats ) {
 }
 
 
-# ----------- defacing via Freesurfer's mri_defacing -----------
+# ----------- defacing via pydeface -----------
 
 # since fsl_deface from FSL didn't work properly in my machine (it didn't touch the face but skimmed ears and
-# some parts of the brain instead), the mri_deface used here is the older one which works as a standalone
-# application with license file not being necessary (see https://dx.doi.org/10.1002/hbm.20312)
+# some parts of the brain instead), neither did mri_deface from FreeSurfer (it didn't converge in some patients,
+# it sliced parts of frontal lobes in others), trying pydeface instead (see https://pypi.org/project/pydeface/)
 
-# check whether there is mri_deface in a "mri_deface" subfolder in the working directory
-# if not, download and install it from https://surfer.nmr.mgh.harvard.edu/fswiki/mri_deface
-for ( i in c("mri_deface","talairach_mixed_with_skull.gca","face.gca") ) {
-  if( file.exists( paste0("mri_deface/",i) ) ) print( paste0(i," : OK") )
-  else print( paste0(i, " not present, download it at https://surfer.nmr.mgh.harvard.edu/fswiki/mri_deface!") )
-}
-
-# now extract all t1w files' names
+# extract all t1w files' names
 t1w.files <- list.files( "data/bids", recursive = T ) %>% as.data.frame() %>% slice( which( grepl("t1w",.) ) )
 
-# loop through all T1w images and deface them, save both the original as well as the defaced image
+# write a text file to be push through a pydeface via macOS terminal
 for ( i in t1w.files[,1] ) {
-  
-  # rename the original file
-  file.rename( from = paste0("data/bids/",i), to = paste0( "data/bids/",gsub(".nii","_original.nii",i) ) )
-  
-  # conduct the defacing by calling mri_deface from terminal
-  system( paste( paste0( getwd(), "/mri_deface/mri_deface" ), # mri_deface tool
-                 paste0( getwd(), "/data/bids/", gsub(".nii","_original.nii",i) ), # the original file/input
-                 paste0( getwd(), "/mri_deface/talairach_mixed_with_skull.gca" ), # mri_deface supporting file
-                 paste0( getwd(), "/mri_deface/face.gca" ), # mri_deface supporting file
-                 paste0( getwd(), "/data/bids/", gsub(".nii","_defaced.nii", i ) ), # output
-                 sep = " " ) )
-  
+  write( paste0( "cd ",getwd(),"/data/bids/",sub( "/[^/]*$", "", i ) ), file = "conduct_pydeface.txt", append = T ) # set-up directory
+  write( paste0("pydeface ", sub( ".*/", "", i ) ), file = "conduct_pydeface.txt", append = T ) # conduct tdefacing
 }
