@@ -1,17 +1,13 @@
 # In this script I first summarize raw (DICOM) MRI data from a chosen parent directory and then convert them
 # to NIfTI format (via Roden`s dcm2niix, https://github.com/rordenlab/dcm2niix) in the BIDS folder structure
 
-# In the latest run (2022-08-31) I ran in R version 4.2.0 (2022-04-22), on aarch64-apple-darwin20 (64-bit)
-# platform under macOS Monterey 12.4. the following versions of packages employed: dplyr_1.0.9, tidyverse_1.3.1,
-# divest_0.10.2, and RNifti_1.4.1
-
 # set working directory (works in RStudio only)
 setwd(dirname(rstudioapi::getSourceEditorContext()$path))
 
 # list packages to be used
 pkgs <- c("dplyr", # for object manipulations
-          "tidyverse", # for more object manipulations
           "divest", # R interface to dcm2niix
+          "tidyverse", # for more object manipulations
           "RNifti", # R-native NIfTI tools
           "english" # rewriting digits to words for nicer file names
           )
@@ -21,7 +17,6 @@ for ( i in pkgs ) {
   if ( i %in% rownames( installed.packages() ) == F ) install.packages(i) # install if it ain't installed yet
   if ( i %in% names( sessionInfo()$otherPkgs ) == F ) library( i , character.only = T ) # load if it ain't loaded yet
 }
-
 
 
 # ----------- prepare parameters for data extraction and control -----------
@@ -57,6 +52,7 @@ for ( i in pats ) {
     closeAllConnections()
   }
 }
+
 
 # ----------- read headers -----------
 
@@ -170,13 +166,37 @@ for ( i in pats ) {
       if ( !dir.exists( paste0( "data/bids/sub-prague-",i,"/ses-postop-",english(j),"/",k ) ) ) dir.create( paste0("data/bids/sub-prague-",i,"/ses-postop-",english(j),"/",k ) )
       
       for ( l in names(nii[[i]][[j]][[k]]) )
-        # save the .nii.gz files into created folders
-        writeNifti( nii[[i]][[j]][[k]][[l]][[1]],
-                    paste0("data/bids/sub-prague-",i,"/ses-postop-",english(j),"/",k,
-                           "/sub-prague-",i,"_ses-postop-",english(j),"_",l,".nii" ) )
+        
+        # create a dummy folder for each image
+        if ( !dir.exists( paste0( "data/bids/sub-prague-",i,"/ses-postop-",english(j),"/",k,"/",l ) ) ) dir.create( paste0("data/bids/sub-prague-",i,"/ses-postop-",english(j),"/",k,"/",l ) )
+      
+        # convert from DICOM to nii via dcm2niix in the shell
+        system( paste0( "dcm2niix -f %f -o ",
+                        # set-up output directory
+                        getwd(), "/data/bids/sub-prague-", i, "/ses-postop-", english(j), "/", k, "/", l, " ",
+                        # write the path to the original image
+                        paste( getwd(), fold, i, ses[[i]][[j]], ifelse( k == "func", "funct", k),
+                               case_when( l == "t1w" ~ "T1_MPRAGE",
+                                          l == "rs_on" ~ "RS_ON",
+                                          l == "rs_off" ~ "RS_OFF" ),
+                               sep = "/" ) ) )
+      
     }
   }
 }
+
+# rename the .nii and .json files
+for ( i in dir("data/bids",recursive = T) ) {
+  
+  file.copy( from = paste0( "data/bids/", i ),
+             to = paste0( "data/bids/", paste( strsplit( i, "/" )[[1]][1:3], collapse = "/" ), "/",
+                          paste( strsplit( i, "/" )[[1]][c(1,4)], collapse = "_" ),
+                          ".", strsplit( i, "[.]" )[[1]][2] ) )
+  
+}
+
+# delete the dummy folders
+for ( i in paste0( "data/bids/", ( dir( "data/bids", recursive = T )[ grepl( "T1_MPRAGE|RS_", dir( "data/bids", recursive = T ) ) & grepl( ".nii", dir( "data/bids", recursive = T ) ) ] %>% sub( "/[^/]*$", "", . ) ) ) ) unlink(i, recursive = T)
 
 
 # ----------- defacing via spm_deface -----------
@@ -187,16 +207,16 @@ for ( i in pats ) {
 # face too often below the eye, trying spm_deface now
 
 # extract all t1w files' names
-t1w.files <- list.files( "data/bids", recursive = T ) %>% as.data.frame() %>% slice( which( grepl("t1w",.) ) )
+t1w.files <- list.files( "data/bids", recursive = T ) %>% as.data.frame() %>% slice( which( grepl("t1w", . ) & grepl(".nii", . ) ) )
 
 # write a matlab script for spm_deface
 writeLines( paste0( "spm_deface( {\n",
-                    paste( paste0("'/Users/josefmana/Desktop/mercenaries/dbs_MRI_neuripides/data/bids/",t1w.files[,1],"'"), collapse = "\n"),
+                    paste( paste0("'", getwd(), "/data/bids/",t1w.files[,1],"'"), collapse = "\n"),
                     "\n} )"
                     ), con = "conduct_spmdeface.m"
             )
 
-# go to matlab and run the code there, work well this time
+# go to MatLab and run the code there, works well this time
 
 
 # ----------- build folder structure for data suitable for sharing -----------
@@ -228,3 +248,9 @@ all.nms <- list.files("data/4share", recursive = T ) %>%
 for ( i in 1:nrow(all.nms) ) file.rename( from = paste0("data/4share/",all.nms[i,"old_nms"]),
                                           to = paste0("data/4share/",all.nms[i,"new_nms"])
                                           )
+
+
+# ---- session info ----
+
+# write the sessionInfo() into a .txt file
+capture.output( sessionInfo(), file = "sessions/dbs_MRI_postop_dcm2nii.txt" )
